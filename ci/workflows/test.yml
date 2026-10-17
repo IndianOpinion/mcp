@@ -1,0 +1,37 @@
+name: test
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: IndianOpinion/cli
+          path: cli
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Build the CLI files the Worker serves
+        run: npm run build:cli
+        env:
+          IO_CLI_DIR: ${{ github.workspace }}/cli
+      - run: npm test
+      - name: Discovery files match the code
+        run: |
+          node --input-type=module -e "
+          import { serverCard, agentsTxt } from './src/discovery.js';
+          import fs from 'node:fs';
+          const card = JSON.stringify(serverCard(), null, 2) + '\n';
+          if (fs.readFileSync('discovery/server-card.json', 'utf8') !== card) throw new Error('discovery/server-card.json is stale');
+          if (fs.readFileSync('discovery/agents.txt', 'utf8') !== agentsTxt()) throw new Error('discovery/agents.txt is stale');
+          "

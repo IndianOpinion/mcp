@@ -1,0 +1,73 @@
+# Example Wrangler configuration for io-mcp. Copy it to wrangler.toml (which
+# is ignored by git) and fill in your own values to run the Worker on your own
+# Cloudflare account. Production is configured and deployed from a private
+# repository; this file only documents the bindings the code expects.
+#
+# Every top-level key must stay ABOVE the first [table] header, or TOML
+# assigns it to that table.
+name = "io-mcp"
+main = "src/index.js"
+compatibility_date = "2026-09-01"
+compatibility_flags = ["nodejs_compat"]
+account_id = "REPLACE_WITH_YOUR_CLOUDFLARE_ACCOUNT_ID"
+workers_dev = true
+preview_urls = false
+
+# Path routes on your own zone (optional; workers.dev works without them).
+# routes = [
+#   { pattern = "example.org/mcp*", zone_id = "REPLACE_WITH_YOUR_ZONE_ID" },
+#   { pattern = "example.org/agents/openapi.json", zone_id = "REPLACE_WITH_YOUR_ZONE_ID" },
+#   { pattern = "example.org/agents/cli/*", zone_id = "REPLACE_WITH_YOUR_ZONE_ID" },
+#   { pattern = "example.org/agents/skill/*", zone_id = "REPLACE_WITH_YOUR_ZONE_ID" },
+#   { pattern = "example.org/agents.txt", zone_id = "REPLACE_WITH_YOUR_ZONE_ID" },
+#   { pattern = "example.org/.well-known/mcp*", zone_id = "REPLACE_WITH_YOUR_ZONE_ID" },
+#   { pattern = "example.org/.well-known/oauth-*", zone_id = "REPLACE_WITH_YOUR_ZONE_ID" },
+#   { pattern = "example.org/oauth/*", zone_id = "REPLACE_WITH_YOUR_ZONE_ID" },
+# ]
+
+[vars]
+# The REST agent API the tools call, and the public site.
+IO_API = "https://indianopinion.org/wp-json/io/v1"
+SITE = "https://indianopinion.org"
+
+[assets]
+directory = "./public"
+binding = "ASSETS"
+run_worker_first = true
+
+[observability]
+enabled = true
+
+# Edge rate limits, in front of the API's own limits (which stay authoritative).
+# namespace_id is any positive integer string unique within your account.
+[[ratelimits]]
+name = "RL_IP"
+namespace_id = "1001"
+simple = { limit = 120, period = 60 }
+
+[[ratelimits]]
+name = "RL_SEARCH"
+namespace_id = "1002"
+simple = { limit = 20, period = 60 }
+
+[[ratelimits]]
+name = "RL_TOKEN"
+namespace_id = "1003"
+simple = { limit = 60, period = 60 }
+
+[[ratelimits]]
+name = "RL_OAUTH"
+namespace_id = "1004"
+simple = { limit = 30, period = 60 }
+
+[[ratelimits]]
+name = "RL_OAUTH_TOKEN"
+namespace_id = "1005"
+simple = { limit = 60, period = 60 }
+
+# OAuth 2.1 state (src/oauth.js). Create it with:
+#   npx wrangler kv namespace create io-mcp-oauth
+# Without this binding the OAuth metadata still answers and /oauth/* is 503.
+[[kv_namespaces]]
+binding = "OAUTH_KV"
+id = "REPLACE_WITH_YOUR_KV_NAMESPACE_ID"

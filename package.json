@@ -1,0 +1,31 @@
+{
+  "name": "io-mcp",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Indian Opinion MCP server (Cloudflare Worker): a thin adapter over the REST agent API, plus the agent discovery files",
+  "homepage": "https://github.com/IndianOpinion/mcp#readme",
+  "bugs": {
+    "url": "https://github.com/IndianOpinion/mcp/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/IndianOpinion/mcp.git"
+  },
+  "license": "MIT",
+  "author": "Indian Opinion <hello@indianopinion.org>",
+  "scripts": {
+    "build:cli": "node scripts/build-cli-assets.mjs",
+    "test": "node --test test/*.test.mjs",
+    "check": "wrangler deploy --dry-run --outdir dist",
+    "dev": "wrangler dev"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/server": "2.0.0",
+    "agents": "0.26.0",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@modelcontextprotocol/client": "2.0.0"
+  }
+}

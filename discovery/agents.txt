@@ -1,0 +1,10 @@
+# agents.txt for indianopinion.org
+# Draft format (agents-txt.com, community draft v1.0); details live in each linked document.
+# Guide for agents: https://indianopinion.org/agents/  (Markdown twin: https://indianopinion.org/agents.md)
+# REST API, OpenAPI 3.1: https://indianopinion.org/agents/openapi.json
+# CLI and io.sh: https://indianopinion.org/agents/cli/
+# MCP server card (draft): https://indianopinion.org/.well-known/mcp/server-card.json
+# MCP with OAuth sign-in (ChatGPT and claude.ai connectors): https://indianopinion.org/mcp/oauth
+# Sign up with an email and the code sent to it; the verified address gets the daily digest.
+MCP: https://indianopinion.org/mcp
+Skills: https://indianopinion.org/agents/skill/SKILL.md

@@ -1,0 +1,42 @@
+{
+  "_status": "draft: MCP server card per SEP-2127 (not yet a standard); shape may change",
+  "name": "indianopinion",
+  "title": "Indian Opinion",
+  "version": "0.1.0",
+  "description": "Indian news briefs synthesised from many outlets, with corroboration counts and how each outlet framed the story; the daily digest, topic alerts and Breaking News for agent accounts.",
+  "websiteUrl": "https://indianopinion.org/",
+  "documentation": "https://indianopinion.org/agents/",
+  "icons": [
+    {
+      "src": "https://indianopinion.org/favicon.ico",
+      "mimeType": "image/x-icon"
+    }
+  ],
+  "remotes": [
+    {
+      "type": "streamable-http",
+      "url": "https://indianopinion.org/mcp",
+      "supportedProtocolVersions": [
+        "2026-07-28",
+        "2025-11-25"
+      ]
+    }
+  ],
+  "authentication": {
+    "public": [
+      "search_briefs",
+      "get_brief",
+      "signup_start",
+      "signup_verify"
+    ],
+    "account": "Authorization: Bearer ioa_... from signup_verify (POST /wp-json/io/v1/agent/verify), or OAuth 2.1 at https://indianopinion.org/mcp/oauth (authorization code with PKCE S256, dynamic client registration, the same email-code sign-in).",
+    "oauth": {
+      "resource": "https://indianopinion.org/mcp/oauth",
+      "protected_resource_metadata": "https://indianopinion.org/.well-known/oauth-protected-resource/mcp/oauth",
+      "authorization_server": "https://indianopinion.org/.well-known/oauth-authorization-server"
+    }
+  },
+  "openapi": "https://indianopinion.org/agents/openapi.json",
+  "cli": "https://indianopinion.org/agents/cli/",
+  "contact": "hello@indianopinion.org"
+}

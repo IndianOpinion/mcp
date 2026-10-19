@@ -1,4 +1,4 @@
-// The 14 tools. Each is a thin adapter over one REST call (two for get_brief
+// The 15 tools. Each is a thin adapter over one REST call (two for get_brief
 // given a URL). Names, titles and all four annotation hints are fixed here so
 // a directory submission later needs no code change (research section 2.2).
 
@@ -14,7 +14,72 @@ const limitSchema = z.number().int().min(1).max(LIMIT_MAX).optional()
   .describe(`How many items to return, 1 to ${LIMIT_MAX}. Default ${LIMIT_DEFAULT}.`);
 
 const ann = (title, readOnlyHint, destructiveHint, idempotentHint, openWorldHint) => ({ title, readOnlyHint, destructiveHint, idempotentHint, openWorldHint });
-const out = z.looseObject({});
+
+// Output schemas: the structuredContent of a successful call (error results carry
+// isError and are not validated). Fields the Worker builds itself are required;
+// fields passed through from the REST API are listed as optional, and every object
+// stays open (looseObject) so a new API field never breaks a client.
+const str = z.string();
+const strN = z.string().nullable();
+const num = z.number();
+const next = z.array(z.looseObject({ rel: str, method: str.optional(), href: str.optional() })).optional();
+const framing = z.record(z.string(), z.number());
+const briefItem = z.looseObject({
+  post_id: num, title: str, url: str, md_url: strN, json_url: str, published: strN, category: strN,
+  outlets_count: num.nullable(), framing, summary: str,
+});
+const prefsSchema = z.looseObject({
+  digest: z.looseObject({ on: z.boolean(), hour_local: num, tz: str, format: str }).optional(),
+  breaking: z.looseObject({ on: z.boolean(), threshold: num, composite: str, max_per_day: num }).optional(),
+  nudges: z.boolean().optional(),
+});
+const topicSchema = z.looseObject({ topic_id: num.nullable().optional(), name: str.optional(), tier: str.optional(), state: str.optional() });
+const eventSchema = z.looseObject({
+  event_id: num, post_id: num.optional(), headline: str, url: strN.optional(), md_url: strN.optional(), json_url: str.optional(),
+  decided_at: strN.optional(), scores: z.looseObject({}).nullable().optional(), composites: z.looseObject({}).nullable().optional(),
+  your_score: num.nullable().optional(), would_send: z.boolean().optional(), delivery: z.looseObject({ status: str }).nullable().optional(),
+});
+export const OUTPUT_SCHEMAS = {
+  search_briefs: z.looseObject({ ok: z.literal(true), count: num, items: z.array(briefItem), next_cursor: strN, truncated: z.boolean() }),
+  get_brief: z.looseObject({
+    ok: z.literal(true), post_id: num, title: str, url: str, md_url: strN, json_url: str, published: strN.optional(), category: strN.optional(),
+    outlets_count: num.nullable(), framing, cite: str, license: strN, brief: str.optional(), analysis: str.optional(),
+    coverage: z.array(z.looseObject({ outlet: str, framing: strN.optional(), note: strN.optional() })).optional(),
+    sources: z.array(z.looseObject({ outlet: str, url: str })).optional(),
+  }),
+  signup_start: z.looseObject({ ok: z.boolean().optional(), sent_to_masked: str.optional(), expires_in: num.optional(), resend_after: num.optional(), max_attempts: num.optional(), next }),
+  signup_verify: z.looseObject({
+    ok: z.boolean().optional(), token: str, token_id: str.optional(), token_type: str.optional(),
+    account: z.looseObject({ id: num, kind: str, email_masked: str.optional(), new_account: z.boolean().optional() }).optional(),
+    browser_url: strN.optional(), preferences: prefsSchema.optional(), next,
+  }),
+  get_account: z.looseObject({
+    ok: z.boolean().optional(), account: z.looseObject({ id: num, kind: str, email_masked: str.optional() }).optional(),
+    preferences: prefsSchema.optional(), topics_followed: num.optional(), breaking_today: z.looseObject({ sent_last_24h: num.optional() }).optional(), next,
+  }),
+  update_preferences: z.looseObject({ ok: z.boolean().optional(), preferences: prefsSchema.optional(), next }),
+  list_topics: z.looseObject({ ok: z.boolean().optional(), following: z.array(topicSchema).optional(), suggested: z.array(z.looseObject({ key: str.optional(), name: str.optional() })), next }),
+  follow_topic: z.looseObject({
+    ok: z.boolean(), created: z.boolean().optional(), subscription: topicSchema.optional(),
+    ambiguous: z.boolean().optional(), options: z.array(z.looseObject({ key: str, name: str })).optional(), next,
+  }),
+  unfollow_topic: z.looseObject({ ok: z.boolean().optional(), removed: z.boolean().optional(), next }),
+  get_digest: z.looseObject({
+    ok: z.boolean().optional(), date: str.optional(), stories: z.array(z.looseObject({ post_id: num.optional(), title: str, url: str.optional() })),
+    total_stories: num, truncated: z.boolean(), next,
+  }),
+  list_breaking: z.looseObject({
+    ok: z.boolean().optional(), rule: z.looseObject({}).optional(), window: z.looseObject({ from: str, to: str }).optional(), window_total: num.optional(),
+    summary: z.looseObject({}).optional(), events: z.array(eventSchema), total_events: num, truncated: z.boolean().optional(), next_cursor: strN.optional(), next,
+  }),
+  get_breaking_event: eventSchema.extend({ ok: z.boolean().optional(), brief: str.optional(), sources: z.array(z.looseObject({ outlet: str, url: str })).optional(), next }),
+  unsubscribe: z.looseObject({ ok: z.boolean().optional(), stopped: z.array(str).optional(), preferences: prefsSchema.optional(), next }),
+  create_browser_link: z.looseObject({ ok: z.boolean().optional(), browser_url: str, expires_in: num.optional(), next }),
+  close_account: z.looseObject({
+    ok: z.boolean().optional(), closed: z.literal(true), deleted: z.literal(false), already_closed: z.boolean().optional(),
+    stopped: z.array(str).optional(), tokens_revoked: num.optional(), retention: str, next,
+  }),
+};
 
 const NEED_TOKEN = 'This tool needs an Indian Opinion agent token. Sign up first: call signup_start with an email address you can read, then signup_verify with the 6-digit code; it returns a token (ioa_...). Then add this server again with the header "Authorization: Bearer <token>" (a remote MCP client cannot change its headers mid-session; the indianopinion CLI bridge, `indianopinion mcp`, stores the token itself). Public tools that work without a token: search_briefs, get_brief.';
 
@@ -26,8 +91,18 @@ function fail(text, extra) {
   return { isError: true, content: [{ type: 'text', text }], ...(extra ? { structuredContent: extra } : {}) };
 }
 
-/** A REST error as a message the model can act on. */
-export function errorText(e) {
+// What to check after a 404, per tool (a tool that takes no date never mentions one).
+const NOT_FOUND_HINT = {
+  get_brief: 'Check the id or URL; search_briefs finds published briefs.',
+  get_digest: 'Check the date (an India date, YYYY-MM-DD); omit it for the latest digest.',
+  get_breaking_event: 'Check the event_id; list_breaking lists recent ones.',
+  unfollow_topic: 'Check the topic_id; list_topics lists the topics followed.',
+  'resource:brief': 'Check the id; search_briefs finds published briefs.',
+  'resource:digest': 'Check the date (YYYY-MM-DD, India date) or use latest.',
+};
+
+/** A REST error as a message the model can act on. `tool` picks the 404 hint. */
+export function errorText(e, tool) {
   if (!(e instanceof ApiError)) return `Unexpected error: ${e && e.message ? e.message : String(e)}. Try again; if it persists, tell the user.`;
   const b = e.body || {};
   if (e.code === 'rest_no_route') {
@@ -37,19 +112,26 @@ export function errorText(e) {
   if (e.code === 'invalid_token' || e.status === 401) {
     return 'The token was refused (invalid_token): it is unknown or was revoked. Sign up again with signup_start and signup_verify (an existing account gets a new token for the same address), then re-add this server with the new Authorization header.';
   }
-  const bits = [b.message || e.message, `(error: ${e.code}`];
-  if (b.field) bits.push(`, field: ${b.field}`);
-  if (b.allowed !== undefined) bits.push(`, allowed: ${JSON.stringify(b.allowed)}`);
-  if (b.attempts_left !== undefined) bits.push(`, attempts left: ${b.attempts_left}`);
-  if (b.suggestion) bits.push(`, did you mean: ${b.suggestion}`);
-  if (e.retryAfter !== undefined && e.retryAfter !== null) bits.push(`, retry after ${e.retryAfter} s`);
-  bits.push(')');
+  const detail = [`error: ${e.code}`];
+  if (b.field) detail.push(`field: ${b.field}`);
+  if (b.allowed !== undefined) detail.push(`allowed: ${JSON.stringify(b.allowed)}`);
+  if (b.attempts_left !== undefined) detail.push(`attempts left: ${b.attempts_left}`);
+  if (b.suggestion) detail.push(`did you mean: ${b.suggestion}`);
+  if (e.retryAfter !== undefined && e.retryAfter !== null) detail.push(`retry after ${e.retryAfter} s`);
   let fix = '';
   if (e.status === 429) fix = ' Wait for the retry time before calling again; do not loop.';
   else if (e.status === 400 || e.status === 422) fix = ' Fix the value and call again.';
-  else if (e.status === 404) fix = ' Check the id or date.';
+  else if (e.status === 404) fix = ` ${NOT_FOUND_HINT[tool] || 'Check the id.'}`;
   else if (e.status >= 500 || e.status === 0) fix = ' The service is unavailable; try again later.';
-  return bits.join('').replace(' (', ' (') + fix;
+  return `${String(b.message || e.message).trim()} (${detail.join(', ')}).${fix}`;
+}
+
+/** The origin's /briefs cursor for "after this item", or null when the item has no usable time. */
+export function keysetCursor(b) {
+  const t = b && Date.parse(b.published);
+  if (!b || !b.id || Number.isNaN(t)) return null;
+  const d = new Date(t).toISOString().slice(0, 19).replace('T', ' ');
+  return b64urlEncode({ d, i: Number(b.id) });
 }
 
 /**
@@ -72,7 +154,7 @@ export function registerTools(server, ctx) {
         result = limited ? fail(`Rate limited by the MCP server: ${limited}. Wait 60 seconds before calling ${name} again.`, { ok: false, error: 'rate_limited', retry_after: 60 }) : await fn(args || {});
       }
     } catch (e) {
-      result = fail(errorText(e), { ok: false, error: e.code || 'error', status: e.status, retry_after: e.retryAfter, options: e.body && e.body.options });
+      result = fail(errorText(e, name), { ok: false, error: e.code || 'error', status: e.status, retry_after: e.retryAfter, options: e.body && e.body.options });
     }
     // Log the tool, the public token id, outcome and latency. Never the secret, an email or article text.
     console.log(JSON.stringify({ t: 'tool', tool: name, tid: auth.tokenId || null, ok: !result.isError, ms: Date.now() - t0 }));
@@ -91,7 +173,7 @@ export function registerTools(server, ctx) {
       limit: limitSchema,
       cursor: z.string().max(400).optional().describe('Opaque cursor from a previous call (next_cursor) to get the next page.'),
     }).strict(),
-    outputSchema: out,
+    outputSchema: OUTPUT_SCHEMAS.search_briefs,
     annotations: ann('Search Indian Opinion briefs', true, false, true, false),
   }, wrap('search_briefs', false, async (a) => {
     const limit = a.limit || LIMIT_DEFAULT;
@@ -120,8 +202,17 @@ export function registerTools(server, ctx) {
     let items = Array.isArray(res.items) ? res.items : [];
     let nextCursor = null;
     if (native) {
-      items = items.slice(0, limit);
-      if (res.next_cursor) nextCursor = b64urlEncode({ native: res.next_cursor, q: state.q, c: state.c, s: state.s, u: state.u });
+      // The origin's next_cursor points after the last item IT returned. If it ever
+      // returns more than asked for (an older origin, or a cached answer), slicing
+      // here and passing its cursor on would skip the extra items,
+      // so the cursor is rebuilt from the last item kept: the origin's keyset is
+      // (post_date_gmt "Y-m-d H:i:s", ID).
+      let nat = res.next_cursor || null;
+      if (items.length > limit) {
+        items = items.slice(0, limit);
+        nat = keysetCursor(items[items.length - 1]) || nat;
+      }
+      if (nat) nextCursor = b64urlEncode({ native: nat, q: state.q, c: state.c, s: state.s, u: state.u });
     } else {
       if (state.q) {
         const words = state.q.toLowerCase().split(/\s+/).filter(Boolean);
@@ -152,7 +243,7 @@ export function registerTools(server, ctx) {
       id_or_url: z.string().min(1).max(500).describe('A post id such as 99812, or an indianopinion.org article URL (the .md or JSON link works too).'),
       include: z.array(z.enum(['brief', 'analysis', 'coverage', 'sources'])).optional().describe('Parts to return. Default ["brief", "coverage"].'),
     }).strict(),
-    outputSchema: out,
+    outputSchema: OUTPUT_SCHEMAS.get_brief,
     annotations: ann('Get one Indian Opinion brief', true, false, true, false),
   }, wrap('get_brief', false, async (a) => {
     const include = a.include && a.include.length ? a.include : ['brief', 'coverage'];
@@ -199,40 +290,41 @@ export function registerTools(server, ctx) {
   // 3. signup_start
   server.registerTool('signup_start', {
     title: 'Start agent sign-up (email a code)',
-    description: 'Start an Indian Opinion agent account: emails a 6-digit code to the address you give (subject "NNNNNN is your Indian Opinion agent code", first line "Code: NNNNNN"). Use it only with an address whose mailbox you or your user can read, then call signup_verify. Verifying subscribes that address to the daily digest (plain text, 7 am India time) and Breaking News at the agent defaults; unsubscribe stops them. Do not call it in a loop: codes are limited to 3 an hour per address.',
+    description: 'Start an Indian Opinion agent account: emails a 6-digit code to the address you give (subject "NNNNNN is your Indian Opinion agent code", first line "Code: NNNNNN"). Use it only with an address whose mailbox you or your user can read, then call signup_verify. Verifying a new address switches on two kinds of email: the daily digest (plain text, 7 am India time) and Breaking News (at most 5 a day under the default rule, mean >= 0.5); unsubscribe with "all" stops both. An address that already has an account keeps its settings. Do not call it in a loop: codes are limited to 3 an hour per address.',
     inputSchema: z.object({
       email: z.string().min(3).max(254).describe('An address whose mailbox you can read.'),
       agent_name: z.string().max(80).optional().describe('A name for this agent, kept with the account.'),
       operator_url: z.string().max(200).optional().describe('An http(s) URL for the agent or its operator.'),
       purpose: z.string().max(280).optional().describe('What the agent will use Indian Opinion for.'),
     }).strict(),
-    outputSchema: out,
+    outputSchema: OUTPUT_SCHEMAS.signup_start,
     annotations: ann('Start agent sign-up (email a code)', false, false, false, true),
   }, wrap('signup_start', false, async (a) => {
     const r = await client.call('POST', '/agent/start', { body: a });
     const resent = r.resent === false ? ` A code was sent less than a minute ago; no new code was sent (resend after ${r.resend_after} s).` : '';
-    const text = `Code sent to ${r.sent_to_masked}. It expires in ${Math.round((r.expires_in || 600) / 60)} minutes; ${r.max_attempts || 5} tries.${resent}\nRead the 6-digit code from that mailbox (subject "NNNNNN is your Indian Opinion agent code"), then call signup_verify with the same email and the code.\nVerifying subscribes the address to the daily digest; unsubscribe stops it.${nextLine(r.next)}`;
+    const text = `Code sent to ${r.sent_to_masked}. It expires in ${Math.round((r.expires_in || 600) / 60)} minutes; ${r.max_attempts || 5} tries.${resent}\nRead the 6-digit code from that mailbox (subject "NNNNNN is your Indian Opinion agent code"), then call signup_verify with the same email and the code.\nVerifying a new address switches on the daily digest and Breaking News (up to 5 a day); unsubscribe with "all" stops both.${nextLine(r.next)}`;
     return ok(text, r);
   }));
 
   // 4. signup_verify
   server.registerTool('signup_verify', {
     title: 'Finish agent sign-up (code to token)',
-    description: 'Finish sign-up: trade the emailed 6-digit code for a bearer token (ioa_...). The token is shown once; store it as a secret (for example IO_TOKEN) and re-add this server with "Authorization: Bearer <token>" to use the account tools. The verified address gets the daily digest from then on. Use after signup_start. An address that already has an account gets a new token for that account.',
+    description: 'Finish sign-up: trade the emailed 6-digit code for a bearer token (ioa_...). The token is shown once; store it as a secret (for example IO_TOKEN) and re-add this server with "Authorization: Bearer <token>" to use the account tools. A newly verified address gets the daily digest and Breaking News (up to 5 a day) from then on; unsubscribe with "all" stops both. Use after signup_start. An address that already has an account gets a new token for that account.',
     inputSchema: z.object({
       email: z.string().min(3).max(254).describe('The same address given to signup_start.'),
       code: z.string().regex(/^\d{6}$/).describe('The 6 digits from the email.'),
       token_label: z.string().max(40).optional().describe('A label for this token, for example "laptop".'),
     }).strict(),
-    outputSchema: out,
+    outputSchema: OUTPUT_SCHEMAS.signup_verify,
     annotations: ann('Finish agent sign-up (code to token)', false, false, false, false),
   }, wrap('signup_verify', false, async (a) => {
     const r = await client.call('POST', '/agent/verify', { body: a });
     const d = (r.digest || (r.preferences && r.preferences.digest)) || { on: true, hour_local: 7, tz: 'Asia/Kolkata' };
+    const br = (r.preferences && r.preferences.breaking) || { on: r.defaults_applied !== false, max_per_day: 5 };
     const text = [
       `Signed in: account ${r.account && r.account.id} (${r.account && r.account.kind}, ${r.account && r.account.new_account ? 'new' : 'existing'}).`,
       `TOKEN (secret, shown once, store it as IO_TOKEN; never paste it into chat or logs): ${r.token}`,
-      `The daily digest is ${d.on === false ? 'off' : 'on'} for this address${d.hour_local ? ` at ${d.hour_local}:00 ${d.tz || 'Asia/Kolkata'}` : ''}; unsubscribe stops it.`,
+      `The daily digest is ${d.on === false ? 'off' : 'on'} for this address${d.hour_local ? ` at ${d.hour_local}:00 ${d.tz || 'Asia/Kolkata'}` : ''}; Breaking News is ${br.on === false ? 'off' : `on (at most ${br.max_per_day || 5} a day)`}. unsubscribe with "all" stops both.`,
       'To use the account tools, add this server again with the header Authorization: Bearer <token>.',
       r.browser_url ? `A one-time browser sign-in link for the human (10 minutes): ${r.browser_url}` : '',
     ].filter(Boolean).join('\n') + nextLine(r.next);
@@ -244,7 +336,7 @@ export function registerTools(server, ctx) {
     title: 'Get my Indian Opinion account',
     description: 'Show the signed-in agent account: kind, masked email, preferences (digest hour and format, Breaking News rule), topics followed and Breaking News emails sent in the last 24 hours. Use it to check what the account will receive before changing anything. Needs a token.',
     inputSchema: z.object({}).strict(),
-    outputSchema: out,
+    outputSchema: OUTPUT_SCHEMAS.get_account,
     annotations: ann('Get my Indian Opinion account', true, false, true, false),
   }, wrap('get_account', true, async () => {
     const r = await client.call('GET', '/agent/me', { auth: true });
@@ -279,7 +371,7 @@ export function registerTools(server, ctx) {
       }).strict().optional(),
       nudges: z.boolean().optional().describe('Profile reminder emails.'),
     }).strict(),
-    outputSchema: out,
+    outputSchema: OUTPUT_SCHEMAS.update_preferences,
     annotations: ann('Update digest and Breaking News settings', false, false, true, false),
   }, wrap('update_preferences', true, async (a) => {
     if (!a.digest && !a.breaking && a.nudges === undefined) return fail('Nothing to change: send at least one of digest, breaking or nudges, for example {"breaking": {"threshold": 0.4}}.');
@@ -294,7 +386,7 @@ export function registerTools(server, ctx) {
     title: 'List followed topics',
     description: 'List the topics this account follows (with tier: instant emails or the daily roundup) and suggested topics with their keys and recent story counts. Use it before follow_topic to pick a key, or to find a topic_id for unfollow_topic. Needs a token.',
     inputSchema: z.object({ limit: limitSchema.describe(`Suggestions to return, 1 to ${LIMIT_MAX}. Default ${LIMIT_DEFAULT}.`) }).strict(),
-    outputSchema: out,
+    outputSchema: OUTPUT_SCHEMAS.list_topics,
     annotations: ann('List followed topics', true, false, true, false),
   }, wrap('list_topics', true, async (a) => {
     const r = await client.call('GET', '/agent/topics', { auth: true });
@@ -318,7 +410,7 @@ export function registerTools(server, ctx) {
       topic_id: z.number().int().positive().optional().describe('A topic id.'),
       tier: z.enum(['instant', 'daily']).optional().describe('instant or daily (default daily).'),
     }).strict(),
-    outputSchema: out,
+    outputSchema: OUTPUT_SCHEMAS.follow_topic,
     annotations: ann('Follow a topic', false, false, true, false),
   }, wrap('follow_topic', true, async (a) => {
     const n = ['text', 'key', 'topic_id'].filter((k) => a[k] !== undefined).length;
@@ -346,7 +438,7 @@ export function registerTools(server, ctx) {
     title: 'Stop following a topic',
     description: 'Stop following one topic by topic_id (from list_topics). Its alerts stop; other topics, the digest and Breaking News are unchanged. Unfollowing a topic not followed changes nothing. Needs a token.',
     inputSchema: z.object({ topic_id: z.number().int().positive().describe('The topic_id from list_topics.') }).strict(),
-    outputSchema: out,
+    outputSchema: OUTPUT_SCHEMAS.unfollow_topic,
     annotations: ann('Stop following a topic', false, true, true, false),
   }, wrap('unfollow_topic', true, async (a) => {
     const r = await client.call('DELETE', `/agent/topics/${a.topic_id}`, { auth: true });
@@ -361,7 +453,7 @@ export function registerTools(server, ctx) {
       date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().describe('India date YYYY-MM-DD. Default: the latest digest.'),
       limit: limitSchema.describe(`Stories to return, 1 to ${LIMIT_MAX}. Default ${LIMIT_DEFAULT}.`),
     }).strict(),
-    outputSchema: out,
+    outputSchema: OUTPUT_SCHEMAS.get_digest,
     annotations: ann('Get the daily digest', true, false, true, false),
   }, wrap('get_digest', true, async (a) => {
     const r = await client.call('GET', a.date ? `/agent/digest/${a.date}` : '/agent/digest/latest', { auth: true });
@@ -380,7 +472,7 @@ export function registerTools(server, ctx) {
       limit: limitSchema,
       only_would_send: z.boolean().optional().describe('Only the events the current rule would send.'),
     }).strict(),
-    outputSchema: out,
+    outputSchema: OUTPUT_SCHEMAS.list_breaking,
     annotations: ann('List Breaking News candidates', true, false, true, false),
   }, wrap('list_breaking', true, async (a) => {
     const r = await client.call('GET', '/agent/breaking/recent', { auth: true, query: { days: a.days || 7 } });
@@ -390,7 +482,7 @@ export function registerTools(server, ctx) {
     events = events.slice(0, a.limit || LIMIT_DEFAULT);
     const rule = r.rule || {};
     const s = r.summary || {};
-    const lines = [`Rule: ${rule.composite} >= ${rule.threshold}, max ${rule.max_per_day} a day (${rule.on ? 'on' : 'off'}). Window ${r.window ? `${r.window.from} to ${r.window.to}` : ''}: ${s.candidates ?? total} candidates, ${s.would_send ?? '?'} would send, ${s.sent ?? '?'} sent.`];
+    const lines = [`Rule: ${rule.composite} >= ${rule.threshold}, max ${rule.max_per_day} a day (${rule.on ? 'on' : 'off'}). Window ${r.window ? `${r.window.from} to ${r.window.to}` : ''}: ${s.candidates ?? total} candidates, ${s.would_send ?? '?'} would send, ${s.sent ?? '?'} sent${r.truncated ? ` (the newest ${s.candidates ?? total} of ${r.window_total ?? 'more'} events in the window; the API pages the rest with next_cursor)` : ''}.`];
     for (const e of events) {
       const c = e.composites || {};
       lines.push(`- [${e.event_id}] ${e.headline} | your score ${e.your_score} ${e.would_send ? '(would send)' : ''} | min ${c.min} mean ${c.mean} geo ${c.geo} breaking ${c.breaking} | ${e.delivery ? e.delivery.status : 'not queued'} | ${e.md_url || e.url}`);
@@ -404,7 +496,7 @@ export function registerTools(server, ctx) {
     title: 'Get one Breaking News event',
     description: 'Get one Breaking News event by event_id (from list_breaking or the json_url in a Breaking News email): headline, scores, composites, whether your rule sends it, delivery status, the brief and its sources. Needs a token.',
     inputSchema: z.object({ event_id: z.number().int().positive().describe('The event_id.') }).strict(),
-    outputSchema: out,
+    outputSchema: OUTPUT_SCHEMAS.get_breaking_event,
     annotations: ann('Get one Breaking News event', true, false, true, false),
   }, wrap('get_breaking_event', true, async (a) => {
     const r = await client.call('GET', `/agent/breaking/${a.event_id}`, { auth: true });
@@ -423,9 +515,9 @@ export function registerTools(server, ctx) {
   // 13. unsubscribe
   server.registerTool('unsubscribe', {
     title: 'Unsubscribe from emails',
-    description: 'Stop emails to this account: "digest" (the daily digest), "breaking" (Breaking News), "topics" (every followed topic) or "all" (all of those and reminders). The account and its tokens stay, and the API keeps working. This is the way to stop the daily digest an agent account gets by default. Needs a token.',
+    description: 'Stop emails to this account: "digest" (the daily digest), "breaking" (Breaking News), "topics" (every followed topic) or "all" (all of those and reminders). The account and its tokens stay, and the API keeps working. A new agent account gets the daily digest and Breaking News by default; "all" stops both. To close the account itself, use close_account. Needs a token.',
     inputSchema: z.object({ what: z.enum(['digest', 'breaking', 'topics', 'all']).describe('What to stop.') }).strict(),
-    outputSchema: out,
+    outputSchema: OUTPUT_SCHEMAS.unsubscribe,
     annotations: ann('Unsubscribe from emails', false, true, true, false),
   }, wrap('unsubscribe', true, async (a) => {
     const r = await client.call('POST', '/agent/unsubscribe', { auth: true, body: { what: a.what } });
@@ -437,17 +529,35 @@ export function registerTools(server, ctx) {
     title: 'Create a browser sign-in link',
     description: 'Create a one-time link (valid 10 minutes, single use) that signs a browser in to this account and opens /account/, so the human behind the agent can see or change settings on the site. Give the link only to that person. Needs a token.',
     inputSchema: z.object({}).strict(),
-    outputSchema: out,
+    outputSchema: OUTPUT_SCHEMAS.create_browser_link,
     annotations: ann('Create a browser sign-in link', false, false, false, false),
   }, wrap('create_browser_link', true, async () => {
     const r = await client.call('POST', '/agent/browser-link', { auth: true });
     return ok(`One-time sign-in link (expires in ${Math.round((r.expires_in || 600) / 60)} minutes, single use; give it only to the account's human): ${r.browser_url}${nextLine(r.next)}`, r);
+  }));
+
+  // 15. close_account
+  server.registerTool('close_account', {
+    title: 'Close this Indian Opinion account',
+    description: 'Close the signed-in account: every token is revoked (this one too, so later calls fail), the digest, Breaking News, topic alerts and reminders stop, and the address can no longer sign in. This is deactivation, not deletion: the account record is kept under the privacy policy\'s retention terms, and erasure or reopening is by email to hello@indianopinion.org. Only call it when the user has asked to close the account; pass confirm: true. To stop emails but keep the account, use unsubscribe. Needs a token.',
+    inputSchema: z.object({ confirm: z.literal(true).describe('Must be true: closing cannot be undone from the API.') }).strict(),
+    outputSchema: OUTPUT_SCHEMAS.close_account,
+    annotations: ann('Close this Indian Opinion account', false, true, true, false),
+  }, wrap('close_account', true, async () => {
+    const r = await client.call('POST', '/agent/close', { auth: true, body: { confirm: true } });
+    const text = [
+      r.already_closed ? 'The account was already closed.' : 'The account is closed.',
+      `Stopped: ${(r.stopped || []).join(', ') || 'all email'}. Tokens revoked: ${r.tokens_revoked ?? 'all'} (this connection's token no longer works).`,
+      r.retention || 'Closing deactivates the account; it does not delete it.',
+    ].join('\n');
+    return ok(text, { ...r, closed: true, deleted: false, retention: r.retention || 'Closing deactivates the account; it does not delete it.' });
   }));
 }
 
 export const TOOL_NAMES = [
   'search_briefs', 'get_brief', 'signup_start', 'signup_verify', 'get_account', 'update_preferences', 'list_topics',
   'follow_topic', 'unfollow_topic', 'get_digest', 'list_breaking', 'get_breaking_event', 'unsubscribe', 'create_browser_link',
+  'close_account',
 ];
 export const SEARCH_TOOLS = new Set(['search_briefs']);
 export const PUBLIC_TOOLS = new Set(['search_briefs', 'get_brief', 'signup_start', 'signup_verify']);

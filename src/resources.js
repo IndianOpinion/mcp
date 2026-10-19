@@ -1,9 +1,25 @@
 // Three resources (research section 2.3), each duplicated by a tool because
 // client support for resources is uneven.
 
-import { ResourceTemplate } from '@modelcontextprotocol/server';
+import { ResourceTemplate, ResourceNotFoundError, ProtocolError, ProtocolErrorCode } from '@modelcontextprotocol/server';
+import { ApiError } from './client.js';
 import { digestMarkdown } from './render.js';
 import { errorText } from './tools.js';
+
+// resources/read failures are JSON-RPC errors, never successful content (IndianOpinion/mcp #6):
+// a malformed id or date and a missing brief or digest are "resource not found" (the SDK sends
+// -32602, as the 2026-07-28 spec requires; earlier clients also accept -32002), a missing or
+// refused token is AUTH_REQUIRED, and anything else goes out as an internal error.
+export const AUTH_REQUIRED = -32001;
+function readError(uri, e, kind) {
+  if (e instanceof ApiError) {
+    if (e.status === 404 && e.code !== 'rest_no_route') return new ResourceNotFoundError(uri, errorText(e, `resource:${kind}`));
+    if (e.status === 401 || e.status === 403) return new ProtocolError(AUTH_REQUIRED, errorText(e, `resource:${kind}`), { uri, reason: e.code });
+    if (e.status === 400) return new ProtocolError(ProtocolErrorCode.InvalidParams, errorText(e, `resource:${kind}`), { uri, reason: e.code });
+    return new ProtocolError(ProtocolErrorCode.InternalError, errorText(e, `resource:${kind}`), { uri });
+  }
+  return new ProtocolError(ProtocolErrorCode.InternalError, `Could not read ${uri}: ${e && e.message ? e.message : String(e)}`, { uri });
+}
 
 export const ABOUT = `# Indian Opinion
 
@@ -22,7 +38,7 @@ Indian Opinion publishes short briefs on Indian news, each synthesised by AI fro
 - CLI: https://indianopinion.org/agents/cli/
 - Guide: https://indianopinion.org/agents/
 
-An agent account always gets the daily digest at its verified address; unsubscribe is the way to stop it.
+A new agent account gets the daily digest and Breaking News (up to 5 a day) at its verified address; unsubscribe with "all" stops both. close_account closes the account: deactivation, not deletion.
 `;
 
 export function registerResources(server, ctx) {
@@ -38,8 +54,10 @@ export function registerResources(server, ctx) {
     title: 'One brief as Markdown', description: 'The Markdown twin of one published brief, by post id. Same as get_brief.',
     mimeType: 'text/markdown', annotations,
   }, async (uri, vars) => {
-    const id = String(vars.id || '').replace(/\D/g, '');
-    const b = await client.call('GET', `/brief/${id}`);
+    const id = String(vars.id || '');
+    if (!/^\d{1,12}$/.test(id)) throw new ResourceNotFoundError(uri.href, `"${id}" is not a brief id: use the number of a published brief, for example indianopinion://brief/99812.`);
+    let b;
+    try { b = await client.call('GET', `/brief/${id}`); } catch (e) { throw readError(uri.href, e, 'brief'); }
     let text = `# ${b.title}\n\n${b.brief || ''}\n\nurl: ${b.url}`;
     if (b.md) {
       try {
@@ -55,12 +73,12 @@ export function registerResources(server, ctx) {
     mimeType: 'text/markdown', annotations,
   }, async (uri, vars) => {
     const date = String(vars.date || 'latest');
-    if (auth.kind !== 'bearer') return { contents: [{ uri: uri.href, mimeType: 'text/plain', text: 'The digest needs an agent token: see signup_start and signup_verify.' }] };
-    try {
-      const d = await client.call('GET', date === 'latest' ? '/agent/digest/latest' : `/agent/digest/${encodeURIComponent(date)}`, { auth: true });
-      return { contents: [{ uri: uri.href, mimeType: 'text/markdown', text: digestMarkdown(d) }] };
-    } catch (e) {
-      return { contents: [{ uri: uri.href, mimeType: 'text/plain', text: errorText(e) }] };
-    }
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(date);
+    const real = m && (() => { const t = new Date(Date.UTC(+m[1], +m[2] - 1, +m[3])); return t.getUTCMonth() === +m[2] - 1 && t.getUTCDate() === +m[3]; })();
+    if (date !== 'latest' && !real) throw new ResourceNotFoundError(uri.href, `"${date}" is not a digest date: use latest or an India date written YYYY-MM-DD.`);
+    if (auth.kind !== 'bearer') throw new ProtocolError(AUTH_REQUIRED, 'The digest needs an agent token: call signup_start and signup_verify, then connect again with Authorization: Bearer <token>.', { uri: uri.href, reason: 'missing_token' });
+    let d;
+    try { d = await client.call('GET', date === 'latest' ? '/agent/digest/latest' : `/agent/digest/${date}`, { auth: true }); } catch (e) { throw readError(uri.href, e, 'digest'); }
+    return { contents: [{ uri: uri.href, mimeType: 'text/markdown', text: digestMarkdown(d) }] };
   });
 }

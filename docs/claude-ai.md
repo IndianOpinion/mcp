@@ -27,8 +27,9 @@ get `search_briefs` and `get_brief`.
 
 ## Notes
 
-- Signing in subscribes the address to the daily digest. Ask Claude to call `unsubscribe` with
-  `digest`, or use the link in any digest email, to stop it.
+- Signing in with a new address switches on the daily digest and Breaking News (up to 5 a day).
+  Ask Claude to call `unsubscribe` with `all` to stop both, or use the link in any email. To close
+  the account itself, ask for `close_account` (deactivation, not deletion).
 - Removing the connector may not revoke its token. Revoke the `oauth Claude` token from the account
   (`indianopinion token list` and `indianopinion token revoke <id>` in the CLI).
 - The connector reaches the server from Anthropic's network, so it must be reachable from the

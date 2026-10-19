@@ -25,8 +25,9 @@ For the public tools only, use `https://indianopinion.org/mcp` with no authentic
 - The menu names above are taken from OpenAI's developer documentation as of the date above; ChatGPT
   renames these screens often. If they differ, follow the vendor page; the URL and OAuth choice stay
   the same.
-- Signing in subscribes the address to the daily digest; ask ChatGPT to call `unsubscribe` with
-  `digest` to stop it.
+- Signing in with a new address switches on the daily digest and Breaking News (up to 5 a day).
+  Ask ChatGPT to call `unsubscribe` with `all` to stop both, or use the link in any email. To close
+  the account itself, ask for `close_account` (deactivation, not deletion).
 - To disconnect fully, also revoke the `oauth ChatGPT` token on the account (`indianopinion token
   list`, then `indianopinion token revoke <id>`).
 

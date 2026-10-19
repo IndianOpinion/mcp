@@ -29,11 +29,15 @@ Specification: https://modelcontextprotocol.io/specification
 
 ## Clients that only speak stdio
 
-Use the CLI as a bridge:
+Use the CLI as a bridge. Install it from GitHub first (it is not on the npm registry yet):
+`npm i -g github:IndianOpinion/cli`. Then:
 
 ```json
-{ "mcpServers": { "indianopinion": { "command": "npx", "args": ["--yes", "indianopinion", "mcp"] } } }
+{ "mcpServers": { "indianopinion": { "command": "indianopinion", "args": ["mcp"] } } }
 ```
+
+After the first npm publish, `"command": "npx", "args": ["--yes", "indianopinion", "mcp"]` works
+without a global install.
 
 It forwards each message to `https://indianopinion.org/mcp` with the token stored by
 `indianopinion login`, and stores the token when `signup_verify` succeeds.

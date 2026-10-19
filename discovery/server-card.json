@@ -2,7 +2,7 @@
   "_status": "draft: MCP server card per SEP-2127 (not yet a standard); shape may change",
   "name": "indianopinion",
   "title": "Indian Opinion",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Indian news briefs synthesised from many outlets, with corroboration counts and how each outlet framed the story; the daily digest, topic alerts and Breaking News for agent accounts.",
   "websiteUrl": "https://indianopinion.org/",
   "documentation": "https://indianopinion.org/agents/",

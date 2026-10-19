@@ -37,7 +37,7 @@ export function agentsTxt() {
 # CLI and io.sh: ${SITE}/agents/cli/
 # MCP server card (draft): ${SITE}/.well-known/mcp/server-card.json
 # MCP with OAuth sign-in (ChatGPT and claude.ai connectors): ${MCP_URL}/oauth
-# Sign up with an email and the code sent to it; the verified address gets the daily digest.
+# Sign up with an email and the code sent to it; a new verified address gets the daily digest and Breaking News (unsubscribe stops them).
 MCP: ${MCP_URL}
 Skills: ${SITE}/agents/skill/SKILL.md
 `;
@@ -51,7 +51,8 @@ Node 20 or newer, no dependencies:
   npx --yes ${SITE}/agents/cli/indianopinion-${latest.version}.tgz --help
 
 bash + curl only:
-  curl -fsSL ${SITE}/agents/cli/io.sh -o ~/bin/io && chmod +x ~/bin/io
+  mkdir -p ~/bin && curl -fsSL ${SITE}/agents/cli/io.sh -o ~/bin/io && chmod +x ~/bin/io
+  ~/bin/io briefs --q monsoon     (or put ~/bin on your PATH and run io)
 
 Files:
   latest.tgz                      the newest tarball (same bytes as the versioned file)

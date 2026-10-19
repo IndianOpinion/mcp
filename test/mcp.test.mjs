@@ -82,7 +82,7 @@ test('initialize, modern 2026-07-28 negotiation', async () => {
   const c = await connect(envFor(stub), { mode: { pin: '2026-07-28' } });
   const mark = seen.length;
   const { tools } = await c.listTools();
-  assert.equal(tools.length, 14);
+  assert.equal(tools.length, 15);
   const r = await c.callTool({ name: 'search_briefs', arguments: { q: 'metro' } });
   assert.ok(!r.isError, textOf(r));
   const modern = seen.slice(mark);
@@ -104,7 +104,7 @@ test('legacy handshake by hand: initialize, initialized, tools/list', async () =
   assert.match(await r.text(), /search_briefs/);
 });
 
-test('tools/list: 14 tools, titles, all four hints explicit, deterministic order', async () => {
+test('tools/list: 15 tools, titles, all four hints explicit, deterministic order', async () => {
   const c = await connect(envFor(stub));
   const { tools } = await c.listTools();
   assert.deepEqual(tools.map((t) => t.name), TOOL_NAMES);
@@ -121,6 +121,7 @@ test('tools/list: 14 tools, titles, all four hints explicit, deterministic order
   assert.equal(byName.signup_start.openWorldHint, true);
   assert.equal(byName.unsubscribe.destructiveHint, true);
   assert.equal(byName.unfollow_topic.destructiveHint, true);
+  assert.equal(byName.close_account.destructiveHint, true);
   assert.equal(byName.update_preferences.destructiveHint, false);
   assert.equal(byName.get_digest.readOnlyHint, true);
   const sb = tools.find((t) => t.name === 'search_briefs');

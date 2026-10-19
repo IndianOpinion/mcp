@@ -23,7 +23,7 @@ discovery files, so anyone can read, run and improve them.
 3. Run `npm ci && npm test`. Add or update tests for any behaviour you change. Tests must not use the
    network.
 4. If you change `src/discovery.js`, regenerate `discovery/server-card.json` and `discovery/agents.txt`
-   (CI shows the command). If you change a tool, update `public/agents/openapi.json` so the
+   (`npm run discovery`; the tests fail if they drift). If you change a tool, update `public/agents/openapi.json` so the
    `operationId` set still matches the tool names, and the tool table in `README.md`.
 5. Never commit a token, a real email address, an account id or a `wrangler.toml`.
 6. Client setup guides in `docs/` must cite the vendor's current documentation at the top. Do not add

@@ -289,7 +289,8 @@ ${msg ? `<p class="err">${esc(msg)}</p>` : ''}
 <label for="email">Email</label><input id="email" name="email" type="email" autocomplete="email" required maxlength="200">
 <button type="submit">Send code</button>
 </form>
-<p class="muted">New addresses get an Indian Opinion account with the daily digest on; unsubscribe at any time. <a href="https://indianopinion.org/privacy-policy/">Privacy</a></p>`, msg ? 400 : 200);
+<p class="muted">New addresses get an Indian Opinion account with the daily digest and Breaking News (up to 5 a day) on; unsubscribe at any time. <a href="https://indianopinion.org/privacy-policy/">Privacy</a></p>
+<p class="muted">Sign-ups through a connector start as agent accounts; the first digest carries a button to switch to a reader's account.</p>`, msg ? 400 : 200);
 }
 
 function codeForm(reqId, masked, msg = '') {

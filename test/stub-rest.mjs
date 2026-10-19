@@ -1,11 +1,18 @@
 // Stub of the Indian Opinion REST API for tests: the public brief routes
 // (/wp-json/io/v1/briefs, /brief/{id}), one article page with its JSON link,
 // its .md twin, and every /agent route of the agent API contract (version of
-// 2 October 2026). Fixtures follow the contract's examples. No network.
+// 2 October 2026, with /agent/close and breaking/recent paging of 19 October).
+// Fixtures follow the contract's examples. No network.
 //
-// startStub({agentLive}) -> {url, api, close, requests, state}
+// startStub({agentLive, briefsNative, briefsOversize}) -> {url, api, close, requests, state}
 //   agentLive false answers every /agent route with WordPress's rest_no_route
 //   404, which is what the live site does until the agent API is deployed.
+//   briefsNative: /briefs filters and pages itself with an opaque next_cursor,
+//   and refuses an invalid limit or since with 400 invalid_field, as the live
+//   route does since 19 October 2026.
+//   briefsOversize (with briefsNative): /briefs answers one item more than the
+//   limit asked for, with the cursor after that extra item, to test that a
+//   client never drops an item between pages.
 
 import http from 'node:http';
 
@@ -39,11 +46,11 @@ function brief(id, title, section, published, extra = {}) {
 }
 
 const BRIEFS = [
-  brief(99812, 'Bengaluru Metro Yellow Line opens to the public', 'India', '2026-10-02T09:15:00+05:30', { keywords: ['Bengaluru Metro', 'BMRCL'] }),
-  brief(99790, 'BSF reports border incident in Punjab', 'Politics', '2026-10-02T08:02:00+05:30', { keywords: ['BSF', 'Punjab'] }),
-  brief(99770, 'Supreme Court hears electoral bonds review', 'Politics', '2026-10-02T07:40:00+05:30', { keywords: ['Supreme Court of India'] }),
-  brief(99750, 'Sensex closes higher on bank stocks', 'Business', '2026-10-01T16:10:00+05:30', { keywords: ['Sensex'] }),
-  brief(99730, 'Monsoon withdraws from north-west India', 'India', '2026-10-01T12:00:00+05:30', { keywords: ['IMD', 'monsoon'] }),
+  brief(99812, 'Bengaluru Metro Yellow Line opens to the public', 'India', '2026-10-02T03:45:00Z', { keywords: ['Bengaluru Metro', 'BMRCL'] }),
+  brief(99790, 'BSF reports border incident in Punjab', 'Politics', '2026-10-02T02:32:00Z', { keywords: ['BSF', 'Punjab'] }),
+  brief(99770, 'Supreme Court hears electoral bonds review', 'Politics', '2026-10-02T02:10:00Z', { keywords: ['Supreme Court of India'] }),
+  brief(99750, 'Sensex closes higher on bank stocks', 'Business', '2026-10-01T10:40:00Z', { keywords: ['Sensex'] }),
+  brief(99730, 'Monsoon withdraws from north-west India', 'India', '2026-10-01T06:30:00Z', { keywords: ['IMD', 'monsoon'] }),
 ];
 
 function digestDoc(site) {
@@ -73,7 +80,7 @@ function event(site, id = 5531) {
   };
 }
 
-export async function startStub({ agentLive = true, briefsNative = false } = {}) {
+export async function startStub({ agentLive = true, briefsNative = false, briefsOversize = false } = {}) {
   const requests = [];
   const state = {
     prefs: {
@@ -83,6 +90,8 @@ export async function startStub({ agentLive = true, briefsNative = false } = {})
     },
     topics: [{ topic_id: 412, name: 'Bengaluru Metro', tier: 'instant', state: 'active', since: '2026-10-02T21:44:10Z' }],
     tokens: [{ id: '3f9c2a71b0de', label: 'prod', created_at: '2026-10-02T21:40:00Z', last_used_at: '2026-10-02T21:41:00Z', current: true }],
+    closed: false,
+    latest: null,
   };
   let site = '';
 
@@ -106,16 +115,37 @@ export async function startStub({ agentLive = true, briefsNative = false } = {})
     }
     if (p === '/story-99812.md') return send(200, '# Bengaluru Metro Yellow Line opens to the public\n\nBrief text.\n', { 'Content-Type': 'text/markdown; charset=utf-8' });
 
+    // The CLI's latest.json, when a test sets state.latest (doctor's version check).
+    if (p === '/agents/cli/latest.json' && state.latest) return send(200, { version: state.latest, url: `${site}/agents/cli/indianopinion-${state.latest}.tgz`, sha256: '0'.repeat(64) });
+
     // Public REST
     if (p === '/wp-json/io/v1/briefs') {
-      const limit = Math.min(100, Math.max(1, parseInt(u.searchParams.get('limit') || '20', 10)));
+      const bad = (field, message) => send(400, { ok: false, error: 'invalid_field', field, message, code: field === 'cursor' ? 'io_bad_cursor' : 'io_invalid_param', data: { status: 400 }, docs });
+      const rawLimit = u.searchParams.get('limit');
+      if (briefsNative && rawLimit !== null && !(/^\d+$/.test(rawLimit) && +rawLimit >= 1 && +rawLimit <= 100)) return bad('limit', 'limit must be a whole number from 1 to 100.');
+      const limit = Math.min(100, Math.max(1, parseInt(rawLimit || '20', 10)));
       let items = BRIEFS;
       const since = u.searchParams.get('since');
+      if (briefsNative && since && Number.isNaN(Date.parse(since))) return bad('since', 'since must be an ISO 8601 time.');
       if (since) items = items.filter((b) => Date.parse(b.published) > Date.parse(since));
       if (briefsNative) {
         const q = (u.searchParams.get('q') || '').toLowerCase();
         if (q) items = items.filter((b) => b.title.toLowerCase().includes(q));
-        return send(200, { count: Math.min(limit, items.length), items: items.slice(0, limit), next_cursor: items.length > limit ? 'native-c2' : null });
+        const c = u.searchParams.get('cursor');
+        let start = 0;
+        if (c) {
+          // 'native-<id>' as issued here, or the origin's keyset form {d, i} in base64url
+          // (what a client rebuilds from the last item it kept).
+          let after = (/^native-(\d+)$/.exec(c) || [])[1];
+          if (!after) { try { after = JSON.parse(Buffer.from(c, 'base64url').toString()).i; } catch { after = undefined; } }
+          if (!after) return bad('cursor', 'That cursor is not one this route issued.');
+          start = items.findIndex((b) => b.id < Number(after));
+          if (start < 0) start = items.length;
+        }
+        const n = briefsOversize ? limit + 1 : limit;
+        const page = items.slice(start, start + n);
+        const last = page[page.length - 1];
+        return send(200, { count: page.length, page: c ? null : 1, per_page: limit, next_cursor: last && start + n < items.length ? `native-${last.id}` : null, items: page });
       }
       return send(200, { count: Math.min(limit, items.length), items: items.slice(0, limit) });
     }
@@ -157,7 +187,7 @@ export async function startStub({ agentLive = true, briefsNative = false } = {})
     // Everything below needs a bearer token
     const auth = String(req.headers.authorization || '');
     if (!auth) return err(401, 'missing_token', 'Send Authorization: Bearer <token>.', {}, { 'WWW-Authenticate': 'Bearer realm="indianopinion.org"' });
-    if (auth !== `Bearer ${GOOD_TOKEN}`) return err(401, 'invalid_token', 'That token is unknown or revoked.', {}, { 'WWW-Authenticate': 'Bearer realm="indianopinion.org", error="invalid_token"' });
+    if (auth !== `Bearer ${GOOD_TOKEN}` || state.closed) return err(401, 'invalid_token', 'That token is unknown or revoked.', {}, { 'WWW-Authenticate': 'Bearer realm="indianopinion.org", error="invalid_token"' });
 
     if (route === '/me' && req.method === 'GET') {
       return send(200, { ok: true, account: { id: 1234, kind: 'agent', email: EMAIL, email_masked: 'br*******@agents.example.org', level: 'subscriber', created_at: '2026-10-02T21:40:00Z',
@@ -210,8 +240,15 @@ export async function startStub({ agentLive = true, briefsNative = false } = {})
       const days = Number(u.searchParams.get('days') || 7);
       if (!(days >= 1 && days <= 7)) return err(400, 'invalid_field', 'days must be 1 to 7.', { field: 'days', allowed: [1, 7] });
       const ev2 = { ...event(site, 5532), would_send: false, your_score: 0.31, delivery: null, headline: 'Minor policy update' };
-      return send(200, { ok: true, rule: { ...state.prefs.breaking }, window: { from: '2026-09-25T21:00:00Z', to: '2026-10-02T21:00:00Z' },
-        summary: { candidates: 2, would_send: 1, sent: 1 }, events: [event(site), ev2], next: [], docs });
+      const all = [event(site), ev2];
+      const lim = Number(u.searchParams.get('limit') || 500);
+      if (!(Number.isInteger(lim) && lim >= 1 && lim <= 500)) return err(400, 'invalid_field', 'limit must be a whole number from 1 to 500.', { field: 'limit', allowed: [1, 500] });
+      const start = u.searchParams.get('cursor') === 'brk-c2' ? 1 : 0;
+      const evs = all.slice(start, start + lim);
+      const more = start + lim < all.length;
+      return send(200, { ok: true, rule: { ...state.prefs.breaking }, window: { from: '2026-09-25T21:00:00Z', to: '2026-10-02T21:00:00Z', days },
+        window_total: all.length, summary: { candidates: evs.length, would_send: evs.filter((e) => e.would_send).length, sent: evs.filter((e) => e.delivery).length, covers: 'this page' },
+        limit: lim, truncated: more, next_cursor: more ? 'brk-c2' : null, events: evs, next: [], docs });
     }
     m = route.match(/^\/breaking\/(\d+)$/);
     if (m && req.method === 'GET') {
@@ -228,6 +265,15 @@ export async function startStub({ agentLive = true, briefsNative = false } = {})
       if (stopped.includes('digest')) state.prefs.digest.on = false;
       if (stopped.includes('breaking')) state.prefs.breaking.on = false;
       return send(200, { ok: true, stopped, preferences: state.prefs, docs, next: [] });
+    }
+    if (route === '/close' && req.method === 'POST') {
+      if (!json || json.confirm !== true) return err(400, 'invalid_field', 'Send {"confirm": true} to close the account.', { field: 'confirm', allowed: [true] });
+      state.closed = true;
+      state.prefs.digest.on = false;
+      state.prefs.breaking.on = false;
+      const retention = 'Closing deactivates the account; it does not delete it. The account record is kept, deactivated, under the retention terms of https://indianopinion.org/privacy-policy/. To ask for erasure or a copy of your data, write to hello@indianopinion.org.';
+      return send(200, { ok: true, closed: true, already_closed: false, deleted: false, stopped: ['digest', 'breaking', 'topics', 'nudges'], tokens_revoked: state.tokens.length,
+        retention, message: `The account is closed. ${retention}`, next: [], docs });
     }
     if (route === '/tokens' && req.method === 'GET') return send(200, { ok: true, tokens: state.tokens, docs, next: [] });
     if (route === '/tokens' && req.method === 'POST') {

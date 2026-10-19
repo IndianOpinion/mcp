@@ -16,8 +16,9 @@ state. It also holds the [OpenAPI 3.1 document](public/agents/openapi.json), the
 [agents.txt](discovery/agents.txt) and the [MCP server card](discovery/server-card.json) the Worker
 serves, and [setup guides for each client](docs/).
 
-The command-line client and stdio bridge is [IndianOpinion/cli](https://github.com/IndianOpinion/cli)
-(`npm i -g indianopinion`).
+The command-line client and stdio bridge is [IndianOpinion/cli](https://github.com/IndianOpinion/cli).
+Until its first npm publish, install it from GitHub: `npm i -g github:IndianOpinion/cli` (or the site
+copy, `npm i -g https://indianopinion.org/agents/cli/latest.tgz`).
 
 ## Connect
 
@@ -37,8 +38,9 @@ The command-line client and stdio bridge is [IndianOpinion/cli](https://github.c
 
 ## Tools
 
-Fourteen tools. Lists default to 10 items and cap at 25. Every tool sets a title and all four
-annotation hints (read-only, destructive, idempotent, open-world).
+Fifteen tools. Lists default to 10 items and cap at 25. Every tool sets a title, all four
+annotation hints (read-only, destructive, idempotent, open-world) and an `outputSchema` that describes
+its `structuredContent`. The server is stateless, so it advertises `listChanged: false`.
 
 | Tool | Auth | What it does |
 |---|---|---|
@@ -56,6 +58,7 @@ annotation hints (read-only, destructive, idempotent, open-world).
 | `get_breaking_event` | account | One Breaking News event in full |
 | `unsubscribe` | account | Stop the digest, Breaking News, topic alerts or all emails |
 | `create_browser_link` | account | A one-time, 10-minute link that signs a browser in to the account page |
+| `close_account` | account | Close the account: tokens revoked, every email stopped, sign-in disabled (deactivation, not deletion) |
 
 Prompts: `morning_briefing`, `explain_framing_gap`, `watch_topic`, `tune_breaking`, `brief_my_human`.
 Resources: `indianopinion://about`, `indianopinion://brief/{id}`, `indianopinion://digest/{date}`.
@@ -77,8 +80,17 @@ The OpenAPI `operationId` of each REST operation equals the MCP tool name.
   connector then appears as a token labelled `oauth <client name>` on the account, where it can be
   revoked.
 
-Verifying an email address subscribes it to the daily digest; `unsubscribe` stops it. Tokens are never
-logged; each tool call logs only the tool name, the public token id, the outcome and the latency.
+Verifying a new email address switches on the daily digest and Breaking News (at most 5 a day under
+the default rule); `unsubscribe` with `all` stops both. `close_account` closes the account (with
+`confirm: true`): every token is revoked, every email stops and the address can no longer sign in. It is
+deactivation, not deletion: the account record is kept, deactivated, under the retention terms of
+https://indianopinion.org/privacy-policy/, and erasure or reopening is by email to
+hello@indianopinion.org. Tokens are never logged; each tool call logs only the tool name, the public
+token id, the outcome and the latency.
+
+`resources/read` failures are JSON-RPC errors: a malformed id or date, or a missing brief or digest, is
+"resource not found" (-32602, as the 2026-07-28 spec requires); a missing token on
+`indianopinion://digest/{date}` is -32001.
 
 ## Rate limits
 
@@ -111,7 +123,8 @@ authoritative; the Worker's limits sit in front of them.
 
 ## Develop
 
-Node 22 or newer.
+Node 20 or newer (`engines` in package.json). `wrangler` is a pinned devDependency, so `npm run dev`
+and `npm run check` need nothing else.
 
 ```sh
 npm ci
@@ -123,8 +136,9 @@ To serve the CLI files under `/agents/cli/` as well, clone
 `IO_CLI_DIR`) and run `npm run build:cli`; the tests then also check those files.
 
 To run the Worker on your own Cloudflare account, copy `wrangler.example.toml` to `wrangler.toml`,
-fill in your account id and KV namespace id, and use `npx wrangler dev`. `discovery/` holds the
-agents.txt and server card exactly as `src/discovery.js` renders them; CI fails if they drift.
+fill in your account id and KV namespace id, and use `npm run dev`. `discovery/` holds the
+agents.txt and server card exactly as `src/discovery.js` renders them (`npm run discovery` rewrites
+them); the test suite fails if they drift.
 
 | File | Role |
 |---|---|
@@ -136,6 +150,7 @@ agents.txt and server card exactly as `src/discovery.js` renders them; CI fails 
 | `src/discovery.js` | Server card, agents.txt, CLI index |
 | `src/render.js` | Text rendering of briefs and digests |
 | `test/` | Node test suites and the REST stub |
+| `CHANGELOG.md` | One entry per `VERSION` |
 
 ## Contributing and security
 

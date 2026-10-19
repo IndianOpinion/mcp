@@ -65,6 +65,7 @@ async function authorize(env, client, { challenge, code = GOOD_CODE, state = 'st
   assert.equal(r1.headers.get('X-Frame-Options'), 'DENY');
   const html = await r1.text();
   assert.match(html, /Connect Claude to Indian Opinion/);
+  assert.match(html, /Sign-ups through a connector start as agent accounts; the first digest carries a button to switch/);
   const req = html.match(/name="req" value="([^"]+)"/)[1];
   const r2 = await call(env, '/oauth/authorize', form({ req, step: 'email', email: EMAIL }));
   assert.equal(r2.status, 200);

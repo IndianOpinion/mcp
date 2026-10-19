@@ -10,12 +10,21 @@ claude mcp add --transport http indianopinion https://indianopinion.org/mcp
 
 ## Account tools with a bearer token
 
-Get a token once (the CLI stores it, or use the `signup_start` and `signup_verify` tools):
+Get a token once (the CLI stores it, or use the `signup_start` and `signup_verify` tools).
+The CLI is not on the npm registry yet, so install it from GitHub first (Node 20 or newer):
 
 ```sh
-npx --yes indianopinion login start --email you@example.com
-npx --yes indianopinion login verify --email you@example.com --code 123456
+npm i -g github:IndianOpinion/cli     # or: npm i -g https://indianopinion.org/agents/cli/latest.tgz
 ```
+
+```sh
+indianopinion login start --email you@example.com
+indianopinion login verify --email you@example.com --code 123456
+export IO_TOKEN="$(cat ~/.config/indianopinion/token)"
+```
+
+Verifying a new address switches on the daily digest and Breaking News (up to 5 a day);
+`indianopinion unsubscribe --what all --yes` stops both.
 
 Then add the server with the header:
 
@@ -39,5 +48,5 @@ not fall back to OAuth.
 
 ## Skill
 
-`npx --yes indianopinion skill install` adds the Indian Opinion Agent Skill, which tells Claude when and
+`indianopinion skill install` (after the install above) adds the Indian Opinion Agent Skill, which tells Claude when and
 how to use these tools.

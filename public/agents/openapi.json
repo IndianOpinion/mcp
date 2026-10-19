@@ -3,9 +3,9 @@
  "jsonSchemaDialect": "https://json-schema.org/draft/2020-12/schema",
  "info": {
   "title": "Indian Opinion API",
-  "version": "2026-10-02",
+  "version": "2026-10-19",
   "summary": "India news briefs and the agent account API: sign-up by email code, the daily digest, topics and Breaking News.",
-  "description": "Written by hand from the agent API contract (2 October 2026) for models and tools. operationIds equal the MCP tool names at https://indianopinion.org/mcp where a tool exists. Every answer has `ok` and `docs`; success answers carry `next` hints. Errors are `{ok:false, error, message, docs}` with `field`, `allowed`, `retry_after` or `attempts_left` where they apply. Times are ISO 8601 UTC; digest dates are India dates. Sign-up: POST /agent/start with an email, read the 6-digit code from that mailbox, POST /agent/verify; the verified address gets the daily digest until unsubscribed. Status: the /briefs and /brief routes are live; the /agent routes answer once the agent API is deployed (until then they are 404 rest_no_route). Guide: https://indianopinion.org/agents/",
+  "description": "Written by hand from the agent API contract (2 October 2026, revised 19 October 2026) for models and tools. operationIds equal the MCP tool names at https://indianopinion.org/mcp where a tool exists. Every /agent answer has `ok` and `docs`; success answers carry `next` hints. Errors are `{ok:false, error, message, docs}` with `field`, `allowed`, `retry_after` or `attempts_left` where they apply; /briefs answers invalid parameters in the same shape (400 `invalid_field`). Times are ISO 8601 UTC with Z on every route, /briefs included; digest dates are India dates. Sign-up: POST /agent/start with an email, read the 6-digit code from that mailbox, POST /agent/verify; a new verified address gets the daily digest and Breaking News (at most 5 a day) until unsubscribed. POST /agent/close closes an account (deactivation, not deletion). Guide: https://indianopinion.org/agents/",
   "contact": {
    "name": "Indian Opinion",
    "email": "hello@indianopinion.org",
@@ -62,7 +62,7 @@
    "get": {
     "operationId": "search_briefs",
     "summary": "Search published briefs",
-    "description": "Published Indian Opinion briefs, newest first. Each brief is synthesised from several Indian outlets and carries a corroboration count and each outlet's framing label. Public, no token. The route takes `limit` (or `per_page`), `page`, `cursor`, `q`, `category`, `since`, `until` and `min_importance`, and answers `count`, `page`, `per_page` and `next_cursor` (null on the last page). Daily digest pages are left out unless `category` names the digest; use the digest routes for them. Cached for a minute.",
+    "description": "Published Indian Opinion briefs, newest first. Each brief is synthesised from several Indian outlets and carries a corroboration count and each outlet's framing label. Public, no token. The route takes `limit` (or `per_page`), `page`, `cursor`, `q`, `category`, `since`, `until` and `min_importance`, all live, and answers `count`, `page` (null on a cursor page), `per_page` and `next_cursor` (null on the last page). An invalid value (`limit=0`, `limit=abc`, `limit=101`, `since=yesterday`, a cursor this route did not issue) answers 400 `invalid_field` naming the `field`; nothing is clamped or ignored silently. Daily digest pages are left out unless `category` names the digest; use the digest routes for them. Answers are cacheable for 60 seconds (`Cache-Control: public, max-age=60, s-maxage=60`).",
     "tags": [
      "Briefs"
     ],
@@ -77,6 +77,9 @@
         },
         "example": {
          "count": 1,
+         "page": 1,
+         "per_page": 20,
+         "next_cursor": null,
          "items": [
           {
            "id": 99812,
@@ -84,13 +87,16 @@
            "url": "https://indianopinion.org/bengaluru-metro-yellow-line-opens/",
            "md": "https://indianopinion.org/bengaluru-metro-yellow-line-opens.md",
            "section": "India",
-           "published": "2026-10-02T09:15:00+05:30",
+           "published": "2026-10-02T03:45:00Z",
            "corroboration": 3
           }
          ]
         }
        }
       }
+     },
+     "400": {
+      "$ref": "#/components/responses/BriefsBadRequest"
      },
      "429": {
       "$ref": "#/components/responses/RateLimited"
@@ -109,7 +115,7 @@
        "maximum": 100,
        "default": 20
       },
-      "description": "Items, 1 to 100."
+      "description": "Items, 1 to 100. Out of range or not a whole number: 400."
      },
      {
       "name": "per_page",
@@ -120,7 +126,7 @@
        "maximum": 100,
        "default": 20
       },
-      "description": "Same as `limit` (the WordPress REST name); `limit` wins when both are sent."
+      "description": "Same as `limit` (the WordPress REST name); `limit` wins when both are sent. Out of range or not a whole number: 400."
      },
      {
       "name": "page",
@@ -131,7 +137,7 @@
        "maximum": 100,
        "default": 1
       },
-      "description": "Page of `limit` items, 1-based. Prefer `cursor` for walking forward."
+      "description": "Page of `limit` items, 1-based. Prefer `cursor` for walking forward. Out of range or not a whole number: 400."
      },
      {
       "name": "since",
@@ -140,13 +146,15 @@
        "type": "string",
        "format": "date-time"
       },
-      "description": "Only briefs published after this ISO 8601 time."
+      "description": "Only briefs published after this ISO 8601 time, for example 2026-10-02T00:00:00Z, or a date (2026-10-02, read as 00:00 UTC). A time without a zone is UTC. URL-encode a \"+\" offset as %2B. Anything else is a 400."
      },
      {
       "name": "min_importance",
       "in": "query",
       "schema": {
-       "type": "integer"
+       "type": "integer",
+       "minimum": 0,
+       "maximum": 1000
       },
       "description": "Only briefs at or above this importance."
      },
@@ -173,7 +181,7 @@
        "type": "string",
        "format": "date-time"
       },
-      "description": "Only briefs published before this ISO 8601 time."
+      "description": "Only briefs published before this ISO 8601 time, for example 2026-10-02T00:00:00Z, or a date (2026-10-02, read as 00:00 UTC). A time without a zone is UTC. URL-encode a \"+\" offset as %2B. Anything else is a 400."
      },
      {
       "name": "cursor",
@@ -181,7 +189,7 @@
       "schema": {
        "type": "string"
       },
-      "description": "Opaque `next_cursor` from an earlier answer: the next page, stable while new briefs arrive. Wins over `page`."
+      "description": "Opaque `next_cursor` from an earlier answer: the next page, stable while new briefs arrive. Wins over `page`. A cursor this route did not issue: 400 (`code` io_bad_cursor)."
      }
     ]
    }
@@ -864,7 +872,7 @@
    "get": {
     "operationId": "list_breaking",
     "summary": "Breaking News candidates",
-    "description": "What your rule would have sent over the last 1 to 7 days, with the four Jev scores, the four composites, would_send (your current rule, ignoring max_per_day) and what was delivered.",
+    "description": "What your rule would have sent over the last 1 to 7 days, with the four Jev scores, the four composites, would_send (your current rule, ignoring max_per_day) and what was delivered. Newest first, at most `limit` events a page (default and maximum 500). When the window holds more, `truncated` is true and `next_cursor` fetches the next page of the same window; `window_total` counts every event in the window and `summary` covers this page only.",
     "tags": [
      "Breaking News"
     ],
@@ -906,7 +914,27 @@
        "minimum": 1,
        "maximum": 7,
        "default": 7
-      }
+      },
+      "description": "Days to look back. Ignored with a cursor (the cursor carries its window)."
+     },
+     {
+      "name": "limit",
+      "in": "query",
+      "schema": {
+       "type": "integer",
+       "minimum": 1,
+       "maximum": 500,
+       "default": 500
+      },
+      "description": "Events a page."
+     },
+     {
+      "name": "cursor",
+      "in": "query",
+      "schema": {
+       "type": "string"
+      },
+      "description": "Opaque `next_cursor` from the previous page."
      }
     ]
    }
@@ -1117,6 +1145,99 @@
         "what": "breaking"
        }
       }
+     }
+    }
+   }
+  },
+  "/agent/close": {
+   "post": {
+    "operationId": "close_account",
+    "summary": "Close the account (deactivation, not deletion)",
+    "description": "Revokes every token (the one in use included), stops the digest, Breaking News, topic alerts and reminders, and disables sign-in for the address. Nothing is deleted: the account record is kept, deactivated, under the retention terms of https://indianopinion.org/privacy-policy/. Erasure, a copy of your data or reopening: hello@indianopinion.org. Idempotent; a later sign-up with the same address answers 403 account_disabled.",
+    "tags": [
+     "Agent account"
+    ],
+    "security": [
+     {
+      "bearer": []
+     }
+    ],
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "object",
+        "required": [
+         "confirm"
+        ],
+        "additionalProperties": false,
+        "properties": {
+         "confirm": {
+          "const": true
+         }
+        }
+       },
+       "example": {
+        "confirm": true
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "Closed",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "properties": {
+          "ok": {
+           "type": "boolean"
+          },
+          "closed": {
+           "const": true
+          },
+          "already_closed": {
+           "type": "boolean"
+          },
+          "deleted": {
+           "const": false
+          },
+          "stopped": {
+           "type": "array",
+           "items": {
+            "type": "string"
+           }
+          },
+          "tokens_revoked": {
+           "type": "integer"
+          },
+          "retention": {
+           "type": "string"
+          },
+          "message": {
+           "type": "string"
+          }
+         }
+        }
+       }
+      }
+     },
+     "400": {
+      "$ref": "#/components/responses/BadRequest"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "415": {
+      "$ref": "#/components/responses/JsonRequired"
+     },
+     "429": {
+      "$ref": "#/components/responses/RateLimited"
+     },
+     "503": {
+      "$ref": "#/components/responses/Unavailable"
      }
     }
    }
@@ -1539,11 +1660,13 @@
      },
      "published": {
       "type": "string",
-      "format": "date-time"
+      "format": "date-time",
+      "description": "UTC, for example 2026-10-02T03:45:00Z"
      },
      "modified": {
       "type": "string",
-      "format": "date-time"
+      "format": "date-time",
+      "description": "UTC"
      },
      "language": {
       "type": "string"
@@ -1555,7 +1678,8 @@
       "type": "array",
       "items": {
        "type": "string"
-      }
+      },
+      "description": "Plain text (no HTML entities), at most 8"
      },
      "corroboration": {
       "type": "integer",
@@ -1599,28 +1723,67 @@
       "format": "uri"
      },
      "index_state": {
-      "type": "string"
+      "type": "string",
+      "enum": [
+       "index",
+       "noindex-search"
+      ]
+     },
+     "qa_state": {
+      "type": "string",
+      "enum": [
+       "none",
+       "verified",
+       "corrected",
+       "held"
+      ],
+      "description": "What happened after publication, from the QA audit trail"
+     },
+     "locked": {
+      "type": "boolean",
+      "description": "An editor locked the text against automated rewrites"
+     },
+     "human_reviewed": {
+      "type": "boolean",
+      "const": false,
+      "description": "Kept for existing consumers; always false (no person reviews each brief before publication). qa_state and locked carry the information."
      }
     }
    },
    "BriefList": {
     "type": "object",
+    "required": [
+     "count",
+     "per_page",
+     "next_cursor",
+     "items"
+    ],
     "properties": {
      "count": {
       "type": "integer"
      },
-     "items": {
-      "type": "array",
-      "items": {
-       "$ref": "#/components/schemas/Brief"
-      }
+     "page": {
+      "type": [
+       "integer",
+       "null"
+      ],
+      "description": "The page number, or null when the answer was asked for with a cursor."
+     },
+     "per_page": {
+      "type": "integer"
      },
      "next_cursor": {
       "type": [
        "string",
        "null"
       ],
-      "x-status": "planned"
+      "description": "Pass as `cursor` for the next page; null on the last page."
+     },
+     "items": {
+      "type": "array",
+      "items": {
+       "$ref": "#/components/schemas/Brief"
+      }
      }
     }
    },
@@ -2274,10 +2437,15 @@
       "type": "object",
       "properties": {
        "from": {
-        "type": "string"
+        "type": "string",
+        "format": "date-time"
        },
        "to": {
-        "type": "string"
+        "type": "string",
+        "format": "date-time"
+       },
+       "days": {
+        "type": "integer"
        }
       }
      },
@@ -2292,6 +2460,9 @@
        },
        "sent": {
         "type": "integer"
+       },
+       "covers": {
+        "const": "this page"
        }
       }
      },
@@ -2303,6 +2474,23 @@
      },
      "next": {
       "$ref": "#/components/schemas/Next"
+     },
+     "window_total": {
+      "type": "integer",
+      "description": "Every scored event in the window, all pages"
+     },
+     "limit": {
+      "type": "integer"
+     },
+     "truncated": {
+      "type": "boolean",
+      "description": "More events of the window remain; follow next_cursor"
+     },
+     "next_cursor": {
+      "type": [
+       "string",
+       "null"
+      ]
      }
     }
    },
@@ -2438,6 +2626,55 @@
      "application/json": {
       "schema": {
        "$ref": "#/components/schemas/Error"
+      }
+     }
+    }
+   },
+   "BriefsBadRequest": {
+    "description": "A query parameter is invalid; `field` names it. `code` and `data.status` repeat it in the WordPress REST error shape.",
+    "content": {
+     "application/json": {
+      "schema": {
+       "allOf": [
+        {
+         "$ref": "#/components/schemas/Error"
+        },
+        {
+         "type": "object",
+         "properties": {
+          "code": {
+           "type": "string",
+           "enum": [
+            "io_invalid_param",
+            "io_bad_cursor"
+           ]
+          },
+          "data": {
+           "type": "object",
+           "properties": {
+            "status": {
+             "const": 400
+            }
+           }
+          }
+         }
+        }
+       ]
+      },
+      "example": {
+       "ok": false,
+       "error": "invalid_field",
+       "field": "limit",
+       "message": "limit must be a whole number from 1 to 100.",
+       "allowed": [
+        1,
+        100
+       ],
+       "code": "io_invalid_param",
+       "data": {
+        "status": 400
+       },
+       "docs": "https://indianopinion.org/agents/"
       }
      }
     }

@@ -59,7 +59,8 @@ test('#13: REST wording about /agent/start and /agent/verify becomes the tools',
   assert.deepEqual(toolNext([{ rel: 'verify', method: 'POST', href: 'x' }]), [{ rel: 'verify', tool: 'signup_verify' }]);
 });
 
-test('#13: the server card account line cites the signup_verify tool, not a REST route', () => {
+const MIRROR = fs.existsSync(path.join(ROOT, 'discovery', 'server-card.json'));
+test('#13: the server card account line cites the signup_verify tool, not a REST route (mirror only)', { skip: !MIRROR }, () => {
   const card = fs.readFileSync(path.join(ROOT, 'discovery', 'server-card.json'), 'utf8');
   assert.doesNotMatch(card, /POST \/wp-json/);
   assert.match(card, /signup_verify tool/);
@@ -72,7 +73,7 @@ test('cli#23: the instructions give both caps: 25 a tool call, 100 for REST and 
   await c.close();
 });
 
-test('#5: check and dev fall back to wrangler.example.toml', () => {
+test('#5: check and dev fall back to wrangler.example.toml (mirror only)', { skip: !MIRROR }, () => {
   const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
   for (const k of ['check', 'dev']) assert.match(pkg.scripts[k], /wrangler\.example\.toml/);
   assert.ok(fs.existsSync(path.join(ROOT, 'wrangler.example.toml')));

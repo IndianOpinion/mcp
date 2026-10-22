@@ -1,6 +1,6 @@
 {
   "name": "io-mcp",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "private": true,
   "type": "module",
   "description": "Indian Opinion MCP server (Cloudflare Worker): a thin adapter over the REST agent API, plus the agent discovery files",
@@ -20,8 +20,8 @@
   "scripts": {
     "build:cli": "node scripts/build-cli-assets.mjs",
     "test": "node --test test/*.test.mjs",
-    "check": "wrangler deploy --dry-run --outdir dist",
-    "dev": "wrangler dev",
+    "check": "wrangler deploy --dry-run --outdir dist -c $(test -f wrangler.toml && echo wrangler.toml || echo wrangler.example.toml)",
+    "dev": "wrangler dev -c $(test -f wrangler.toml && echo wrangler.toml || echo wrangler.example.toml)",
     "discovery": "node scripts/render-discovery.mjs"
   },
   "dependencies": {

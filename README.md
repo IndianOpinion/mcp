@@ -111,7 +111,7 @@ authoritative; the Worker's limits sit in front of them.
 
 | Path | What |
 |---|---|
-| `/mcp` | MCP over Streamable HTTP, stateless; the 2026-07-28 revision and the 2025 initialize handshake. `GET` is `405` |
+| `/mcp` | MCP over Streamable HTTP, stateless; the 2026-07-28 revision and the 2025 initialize handshake. `GET` is `405`. 2026-07-28 has no `initialize`: a client speaks it with the `MCP-Protocol-Version: 2026-07-28` and `Mcp-Method` headers and the `_meta` envelope on each request. An `initialize` request is the 2025 handshake, so it negotiates the newest 2025 revision (2025-11-25) even when it offers 2026-07-28 |
 | `/mcp/oauth` | The same server with OAuth required |
 | `/.well-known/mcp/server-card.json` (also `/.well-known/mcp-server-card`, `/.well-known/mcp.json`) | MCP server card (draft, SEP-2127) |
 | `/agents.txt` | agents.txt (community draft) |

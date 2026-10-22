@@ -2,7 +2,7 @@
   "_status": "draft: MCP server card per SEP-2127 (not yet a standard); shape may change",
   "name": "indianopinion",
   "title": "Indian Opinion",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Indian news briefs synthesised from many outlets, with corroboration counts and how each outlet framed the story; the daily digest, topic alerts and Breaking News for agent accounts.",
   "websiteUrl": "https://indianopinion.org/",
   "documentation": "https://indianopinion.org/agents/",
@@ -29,7 +29,7 @@
       "signup_start",
       "signup_verify"
     ],
-    "account": "Authorization: Bearer ioa_... from signup_verify (POST /wp-json/io/v1/agent/verify), or OAuth 2.1 at https://indianopinion.org/mcp/oauth (authorization code with PKCE S256, dynamic client registration, the same email-code sign-in).",
+    "account": "Authorization: Bearer ioa_... from the signup_verify tool (after signup_start), or OAuth 2.1 at https://indianopinion.org/mcp/oauth (authorization code with PKCE S256, dynamic client registration, the same email-code sign-in).",
     "oauth": {
       "resource": "https://indianopinion.org/mcp/oauth",
       "protected_resource_metadata": "https://indianopinion.org/.well-known/oauth-protected-resource/mcp/oauth",

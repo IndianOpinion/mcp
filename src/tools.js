@@ -123,7 +123,22 @@ export function errorText(e, tool) {
   else if (e.status === 400 || e.status === 422) fix = ' Fix the value and call again.';
   else if (e.status === 404) fix = ` ${NOT_FOUND_HINT[tool] || 'Check the id.'}`;
   else if (e.status >= 500 || e.status === 0) fix = ' The service is unavailable; try again later.';
-  return `${String(b.message || e.message).trim()} (${detail.join(', ')}).${fix}`;
+  return `${mcpWording(String(b.message || e.message).trim())} (${detail.join(', ')}).${fix}`;
+}
+
+// The REST API's messages name its own routes; over MCP the next step is a tool (#13).
+export function mcpWording(m) {
+  return m
+    .replace(/(?:POST|GET)\s+(?:https?:\/\/\S+?)?(?:\/wp-json\/io\/v1)?\/agent\/start\b/g, 'the signup_start tool')
+    .replace(/(?:POST|GET)\s+(?:https?:\/\/\S+?)?(?:\/wp-json\/io\/v1)?\/agent\/verify\b/g, 'the signup_verify tool')
+    .replace(/\bPOST it to \/agent\/verify\b/g, 'call signup_verify with it');
+}
+
+/** A REST `next` list as tool names, for structuredContent over MCP (#13). */
+export function toolNext(next) {
+  if (!Array.isArray(next)) return [];
+  const map = { verify: 'signup_verify', start: 'signup_start', me: 'get_account', account: 'get_account', preferences: 'update_preferences', topics: 'list_topics', digest: 'get_digest', breaking: 'list_breaking', articles: 'search_briefs', unsubscribe: 'unsubscribe', 'browser-link': 'create_browser_link' };
+  return next.filter((n) => n && n.rel).map((n) => (map[n.rel] ? { rel: n.rel, tool: map[n.rel] } : { rel: n.rel, method: n.method || 'GET', href: n.href }));
 }
 
 /** The origin's /briefs cursor for "after this item", or null when the item has no usable time. */
@@ -229,7 +244,9 @@ export function registerTools(server, ctx) {
     }
     const list = items.map((b) => compactBrief(b, api));
     const header = list.length
-      ? `${list.length} brief${list.length === 1 ? '' : 's'}${state.q ? ` for "${state.q}"` : ''}${state.c ? ` in ${state.c}` : ''}.`
+      ? (state.q || state.c
+        ? `${list.length} brief${list.length === 1 ? '' : 's'}${state.q ? ` for "${state.q}"` : ''}${state.c ? ` in ${state.c}` : ''}.`
+        : `The ${list.length} latest brief${list.length === 1 ? '' : 's'} (no q or category given, so nothing was filtered; this is not a search result).`)
       : `No published briefs matched${state.q ? ` "${state.q}"` : ''}${state.c ? ` in ${state.c}` : ''}. ${native ? 'Try fewer words or a wider window.' : 'This search covers the newest 100 briefs; try fewer words or a wider window.'}`;
     const text = briefListText(list, header) + (nextCursor ? `\n\nMore: call search_briefs with cursor "${nextCursor}".` : '') + '\nNext: get_brief for the full text of one.';
     return ok(text, { ok: true, count: list.length, items: list, next_cursor: nextCursor, truncated: !!nextCursor });
@@ -303,7 +320,7 @@ export function registerTools(server, ctx) {
     const r = await client.call('POST', '/agent/start', { body: a });
     const resent = r.resent === false ? ` A code was sent less than a minute ago; no new code was sent (resend after ${r.resend_after} s).` : '';
     const text = `Code sent to ${r.sent_to_masked}. It expires in ${Math.round((r.expires_in || 600) / 60)} minutes; ${r.max_attempts || 5} tries.${resent}\nRead the 6-digit code from that mailbox (subject "NNNNNN is your Indian Opinion agent code"), then call signup_verify with the same email and the code.\nVerifying a new address switches on the daily digest and Breaking News (up to 5 a day); unsubscribe with "all" stops both.${nextLine(r.next)}`;
-    return ok(text, r);
+    return ok(text, { ...r, message: r.message ? mcpWording(r.message) : r.message, next: toolNext(r.next) });
   }));
 
   // 4. signup_verify
@@ -328,7 +345,7 @@ export function registerTools(server, ctx) {
       'To use the account tools, add this server again with the header Authorization: Bearer <token>.',
       r.browser_url ? `A one-time browser sign-in link for the human (10 minutes): ${r.browser_url}` : '',
     ].filter(Boolean).join('\n') + nextLine(r.next);
-    return ok(text, r);
+    return ok(text, { ...r, message: r.message ? mcpWording(r.message) : r.message, next: toolNext(r.next) });
   }));
 
   // 5. get_account

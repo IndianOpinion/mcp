@@ -20,7 +20,7 @@ export function serverCard() {
     remotes: [{ type: 'streamable-http', url: MCP_URL, supportedProtocolVersions: PROTOCOL_VERSIONS.slice(0, 2) }],
     authentication: {
       public: ['search_briefs', 'get_brief', 'signup_start', 'signup_verify'],
-      account: 'Authorization: Bearer ioa_... from signup_verify (POST /wp-json/io/v1/agent/verify), or OAuth 2.1 at ' + MCP_URL + '/oauth (authorization code with PKCE S256, dynamic client registration, the same email-code sign-in).',
+      account: 'Authorization: Bearer ioa_... from the signup_verify tool (after signup_start), or OAuth 2.1 at ' + MCP_URL + '/oauth (authorization code with PKCE S256, dynamic client registration, the same email-code sign-in).',
       oauth: { resource: MCP_URL + '/oauth', protected_resource_metadata: SITE + '/.well-known/oauth-protected-resource/mcp/oauth', authorization_server: SITE + '/.well-known/oauth-authorization-server' },
     },
     openapi: SITE + '/agents/openapi.json',

@@ -1,4 +1,4 @@
-export const VERSION = '0.2.0';
+export const VERSION = '0.2.1';
 export const SITE = 'https://indianopinion.org';
 export const MCP_URL = 'https://indianopinion.org/mcp';
 export const DOCS = 'https://indianopinion.org/agents/';

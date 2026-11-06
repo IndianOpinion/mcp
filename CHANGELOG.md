@@ -5,6 +5,16 @@ All notable changes to the Indian Opinion MCP server (the Worker at https://indi
 document; it is bumped with every deployable change. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.2.2] - 2026-11-06
+
+### Security
+
+- zod 4.6.7 (was 4.6.5): GHSA-mrhx-c7xc-m3w5, memory exhaustion while validating oversized constrained collections (high, fixed in 4.6.6). The Worker validates every tool call's arguments with zod.
+
+### Changed
+
+- `/agents/cli/` serves the indianopinion CLI 0.2.2 (`latest.tgz`, `latest.json`, `SHA256SUMS`, `io.sh`, `SKILL.md`), built from the IndianOpinion/cli v0.2.2 tag and byte-identical to the release asset. 0.2.2 fixes `io.sh <command> --help` (exits 0) and `io.sh` with no arguments (exits 2), among others.
+
 ## [0.2.1] - 2026-10-22
 
 ### Changed

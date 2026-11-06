@@ -47,7 +47,7 @@ async function rpc(env, body, headers = {}) {
 }
 
 test('#11: serverInfo.version is the bumped VERSION', async () => {
-  assert.equal(VERSION, '0.2.1');
+  assert.equal(VERSION, '0.2.2');
   const c = await connect(envFor(stub));
   assert.equal(c.getServerVersion().version, VERSION);
   await c.close();

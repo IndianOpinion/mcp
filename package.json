@@ -1,6 +1,6 @@
 {
   "name": "io-mcp",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "private": true,
   "type": "module",
   "description": "Indian Opinion MCP server (Cloudflare Worker): a thin adapter over the REST agent API, plus the agent discovery files",
@@ -27,7 +27,7 @@
   "dependencies": {
     "@modelcontextprotocol/server": "2.3.1",
     "agents": "0.30.0",
-    "zod": "^4.6.5"
+    "zod": "^4.6.7"
   },
   "devDependencies": {
     "@modelcontextprotocol/client": "2.3.1",

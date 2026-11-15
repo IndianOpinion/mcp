@@ -560,8 +560,8 @@ export function registerTools(server, ctx) {
     inputSchema: z.object({ confirm: z.literal(true).describe('Must be true: closing cannot be undone from the API.') }).strict(),
     outputSchema: OUTPUT_SCHEMAS.close_account,
     annotations: ann('Close this Indian Opinion account', false, true, true, false),
-  }, wrap('close_account', true, async () => {
-    const r = await client.call('POST', '/agent/close', { auth: true, body: { confirm: true } });
+  }, wrap('close_account', true, async (a) => {
+    const r = await client.call('POST', '/agent/close', { auth: true, body: { confirm: a.confirm } });
     const text = [
       r.already_closed ? 'The account was already closed.' : 'The account is closed.',
       `Stopped: ${(r.stopped || []).join(', ') || 'all email'}. Tokens revoked: ${r.tokens_revoked ?? 'all'} (this connection's token no longer works).`,

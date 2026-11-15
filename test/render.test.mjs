@@ -2,7 +2,7 @@
 // no stub server: node --test test/render.test.mjs
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { summary, sentences } from '../src/render.js';
+import { summary, sentences, digestMarkdown, b64urlEncode, b64urlDecode } from '../src/render.js';
 
 test('rupee figures with a decimal point survive the summary', () => {
   const brief = 'Drishyam 3 collected Rs 95.10 crore gross worldwide on its opening day. It made Rs 80.10 crore gross in India. Trade analysts expect a strong weekend.';
@@ -31,4 +31,24 @@ test('ordinary sentences, closing quotes and text without a stop', () => {
 test('long text is cut on a word boundary with an ellipsis', () => {
   const s = summary('Word '.repeat(200) + 'end.', 50);
   assert.ok(s.length <= 52 && s.endsWith('...'), s);
+});
+
+test('digestMarkdown omits undefined lead without leaving a blank line', () => {
+  const d = { date: '2026-10-02', stories: [{ title: 'Test', url: 'https://example.com/test' }] };
+  const md = digestMarkdown(d);
+  assert.doesNotMatch(md, /undefined/);
+  assert.match(md, /# Indian Opinion digest 2026-10-02/);
+  assert.match(md, /1\. Test/);
+});
+
+test('b64urlEncode and b64urlDecode round-trip with non-ASCII', () => {
+  const obj = { q: 'मुंबई', i: 42 };
+  const encoded = b64urlEncode(obj);
+  assert.doesNotMatch(encoded, /[+/=]/);
+  const decoded = b64urlDecode(encoded);
+  assert.deepEqual(decoded, obj);
+});
+
+test('b64urlDecode returns null for garbage', () => {
+  assert.equal(b64urlDecode('!!!not-valid!!!'), null);
 });

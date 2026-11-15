@@ -110,6 +110,7 @@ const API_CORS = {
   'Access-Control-Allow-Headers': 'Content-Type, Authorization, MCP-Protocol-Version',
   'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
   'Access-Control-Max-Age': '86400',
+  'X-Content-Type-Options': 'nosniff',
 };
 function json(body, status = 200, extra = {}) {
   return new Response(JSON.stringify(body, null, 2) + '\n', { status, headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', Pragma: 'no-cache', ...API_CORS, ...extra } });
@@ -124,6 +125,7 @@ const PAGE_HEADERS = {
   'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'; form-action 'self' https: http://localhost:* http://127.0.0.1:*; frame-ancestors 'none'; base-uri 'none'",
   'Referrer-Policy': 'no-referrer',
   'X-Content-Type-Options': 'nosniff',
+  'Strict-Transport-Security': 'max-age=63072000; includeSubDomains',
 };
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 

@@ -101,15 +101,17 @@ export function briefListText(items, header) {
 }
 
 export function b64urlEncode(obj) {
-  const s = JSON.stringify(obj);
-  const b = btoa(unescape(encodeURIComponent(s)));
-  return b.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  const bytes = new TextEncoder().encode(JSON.stringify(obj));
+  let s = '';
+  for (const b of bytes) s += String.fromCharCode(b);
+  return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
 
 export function b64urlDecode(str) {
   try {
-    const b = str.replace(/-/g, '+').replace(/_/g, '/');
-    return JSON.parse(decodeURIComponent(escape(atob(b))));
+    const raw = atob(str.replace(/-/g, '+').replace(/_/g, '/'));
+    const bytes = Uint8Array.from(raw, (c) => c.charCodeAt(0));
+    return JSON.parse(new TextDecoder().decode(bytes));
   } catch {
     return null;
   }
@@ -124,5 +126,5 @@ export function digestMarkdown(d, items) {
     lines.push(`url: ${s.url}  md_url: ${s.md_url || ''}`);
     if (s.summary) lines.push(`summary: ${s.summary}`);
   });
-  return lines.filter((l) => l !== null).join('\n');
+  return lines.filter((l) => l != null && l !== '').join('\n');
 }

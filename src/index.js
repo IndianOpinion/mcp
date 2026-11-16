@@ -39,6 +39,7 @@ const CORS = {
   'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
   'Access-Control-Expose-Headers': 'WWW-Authenticate',
   'Access-Control-Max-Age': '86400',
+  'X-Content-Type-Options': 'nosniff',
 };
 const MAX_BODY = 16 * 1024;
 
@@ -58,7 +59,7 @@ export function buildServer(env, auth, clientIp) {
         const r = await env.RL_TOKEN.limit({ key: `t:${auth.tokenId}` });
         if (!r.success) return 'account tools are limited to 60 calls a minute per token';
       }
-    } catch { /* a limiter outage never blocks a call; the origin limits still apply */ }
+    } catch (_) { /* a limiter outage never blocks a call; the origin limits still apply */ }
     return null;
   };
   // listChanged is false (IndianOpinion/mcp #9): the transport is stateless (no session, GET /mcp is 405),
@@ -87,7 +88,7 @@ async function serveMcp(request, env, ctx) {
     try {
       const r = await env.RL_IP.limit({ key: `ip:${clientIp}` });
       if (!r.success) return new Response(JSON.stringify({ jsonrpc: '2.0', id: null, error: { code: -32000, message: 'Rate limited: 120 requests a minute per IP. Retry after 60 seconds.' } }), { status: 429, headers: { 'Content-Type': 'application/json', 'Retry-After': '60', ...CORS } });
-    } catch { /* limiter outage: carry on */ }
+    } catch (_) { /* limiter outage: carry on */ }
   }
   const mcpPath = url.pathname;
   const auth = await resolveAuth(request, env);
@@ -143,7 +144,7 @@ export default {
     if (isGet && p === '/agents/openapi.json') return serveAsset(request, env, p);
     if (isGet && (p === '/agents/cli' || p === '/agents/cli/')) {
       let latest = { version: VERSION };
-      try { const r = await env.ASSETS.fetch(new Request(new URL('/agents/cli/latest.json', request.url))); if (r.ok) latest = await r.json(); } catch { /* keep default */ }
+      try { const r = await env.ASSETS.fetch(new Request(new URL('/agents/cli/latest.json', request.url))); if (r.ok) latest = await r.json(); } catch (_) { /* keep default */ }
       return text(cliIndex(latest));
     }
     if (isGet && /^\/agents\/(cli|skill)\/[A-Za-z0-9._-]+$/.test(p)) return serveAsset(request, env, p);

@@ -6,3 +6,6 @@ wrangler.toml
 # Built from https://github.com/IndianOpinion/cli by `npm run build:cli`.
 public/agents/cli/
 .DS_Store
+*.tgz
+.vscode/
+.idea/

@@ -110,6 +110,7 @@ const API_CORS = {
   'Access-Control-Allow-Headers': 'Content-Type, Authorization, MCP-Protocol-Version',
   'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
   'Access-Control-Max-Age': '86400',
+  'X-Content-Type-Options': 'nosniff',
 };
 function json(body, status = 200, extra = {}) {
   return new Response(JSON.stringify(body, null, 2) + '\n', { status, headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', Pragma: 'no-cache', ...API_CORS, ...extra } });
